@@ -100,8 +100,13 @@ static pyobj build_env(const sstring &path) {
     return std::move(env);
 }
 
-future<std::unique_ptr<reply>> wsgi_handler::handle(const sstring& path,
-                                                   std::unique_ptr<request> req, std::unique_ptr<reply> rep) {
+future<std::unique_ptr<reply>> wsgi_handler::handle(const sstring &path,
+                                                    std::unique_ptr<request> req, std::unique_ptr<reply> rep) {
+    static sstring content_type("text/plain");
+    static sstring body("hello");
     auto env = build_env(path);
+    rep->set_status(reply::status_type::ok, "ok");
+    rep->set_content_type(content_type);
+    rep->write_body(content_type, body);
     return make_ready_future<std::unique_ptr<reply>>(std::move(rep));
 }
