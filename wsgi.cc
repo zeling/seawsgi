@@ -1,7 +1,6 @@
 #include "wsgi.hh"
 #include <iostream>
 
-
 struct wsgi_input {
     PyObject_HEAD
 };
@@ -93,7 +92,7 @@ pyobj wsgi_handler::build_environ(request *req) {
     auto version = pyobj(Py_BuildValue("(ii)", 1, 0));
     PyDict_SetItemString(env.get(), "wsgi.version", version.get());
 
-    PyDict_SetItemString(env.get(), "wsgi.multithread", Py_False);
+    PyDict_SetItemString(env.get(), "wsgi.multithread", Py_True);
     PyDict_SetItemString(env.get(), "wsgi.multiprocess", Py_False);
     PyDict_SetItemString(env.get(), "wsgi.run_once", Py_False);
     auto url_schema = pyobj(PyBytes_FromString("http"));
