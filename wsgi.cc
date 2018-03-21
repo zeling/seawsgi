@@ -1,4 +1,5 @@
 #include "wsgi.hh"
+#include <iostream>
 
 
 struct wsgi_input {
@@ -81,6 +82,7 @@ future<std::unique_ptr<reply>> wsgi_handler::handle(const sstring &path,
     rep->set_status(reply::status_type::ok, "ok");
     rep->set_content_type(content_type);
     rep->write_body(content_type, body);
+    auto env = build_environ(req.get());
     return make_ready_future<std::unique_ptr<reply>>(std::move(rep));
 }
 
@@ -104,6 +106,90 @@ pyobj wsgi_handler::build_environ(request *req) {
 
     pyobj script_path = pyobj(PyBytes_FromString(_script_name.c_str()));
     PyDict_SetItemString(env.get(), "SCRIPT_PATH", script_path.get());
+
+    auto url = req->_url;
+    auto pos = url.find('?');
+    pyobj path_info, query_string;
+    for (size_t i = 0; i < _script_name.size(); i++) {
+        if (_script_name[i] != url[i + 1]) {
+            assert(false && "the initial part of the url should be the same as _script_name");
+        }
+    }
+    if (pos != seastar::sstring::npos) {
+        url.data()[pos] = '\0';
+        path_info = pyobj(PyBytes_FromString(url.data() + _script_name.size() + 1));
+        query_string = pyobj(PyBytes_FromString(url.data() + pos + 1));
+    } else {
+        path_info = pyobj(PyBytes_FromString(url.data() + _script_name.size() + 1));
+        query_string = pyobj(PyBytes_FromString(""));
+    }
+
+    PyDict_SetItemString(env.get(), "PATH_INFO", path_info.get());
+    PyDict_SetItemString(env.get(), "QUERY_STRING", query_string.get());
+
+    auto ctype = req->get_header("Content-Type");
+    if (!ctype.empty()) {
+        pyobj content_type = pyobj(PyBytes_FromString(ctype.c_str()));
+        PyDict_SetItemString(env.get(), "Content-Type", content_type.get());
+    }
+
+    auto clength = req->get_header("Content-Length");
+    if (!clength.empty()) {
+        pyobj content_length = pyobj(PyBytes_FromString(clength.c_str()));
+        PyDict_SetItemString(env.get(), "Content-Length", content_length.get());
+    }
+
+    pyobj server_name = pyobj(PyBytes_FromString("seawsgi"));
+    PyDict_SetItemString(env.get(), "SERVER_NAME", server_name.get());
+
+    pyobj server_port = pyobj(PyBytes_FromString(_port.c_str()));
+    PyDict_SetItemString(env.get(), "SERVER_PORT", server_port.get());
+
+    pyobj server_protocol = pyobj(PyBytes_FromString(req->_method.c_str()));
+    PyDict_SetItemString(env.get(), "SERVER_PROTOCOL", server_protocol.get());
+
+    for (auto &&e : req->_headers) {
+        static constexpr const char CONTENT_TYPE[] = "CONTENT-TYPE";
+        static constexpr const char CONTENT_LENGTH[] = "CONTENT-LENGTH";
+        static constexpr const char HTTP_[] = "HTTP_";
+        auto &field_name = e.first;
+        if (field_name.size() == strlen(CONTENT_TYPE)) {
+            bool found = true;
+            for (size_t i = 0; i < field_name.size(); i++) {
+                if (field_name[i] - CONTENT_TYPE[i] != 0 && field_name[i] - CONTENT_TYPE[i] != 'a' - 'A') {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                pyobj content_type = pyobj(PyBytes_FromString(e.second.c_str()));
+                PyDict_SetItemString(env.get(), CONTENT_TYPE, content_type.get());
+            }
+        } else if (field_name.size() == strlen(CONTENT_LENGTH)) {
+            bool found = true;
+            for (size_t i = 0; i < field_name.size(); i++) {
+                if (field_name[i] - CONTENT_LENGTH[i] != 0 && field_name[i] - CONTENT_LENGTH[i] != 'a' - 'A') {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                pyobj content_length = pyobj(PyBytes_FromString(e.second.c_str()));
+                PyDict_SetItemString(env.get(), CONTENT_LENGTH, content_length.get());
+            }
+        } else {
+            bool isHTTP_ = true;
+            for (size_t i = 0; i < std::min(size_t(4), field_name.size()); i++) {
+                if (field_name[i] - HTTP_[i] != 0 && field_name[i] - HTTP_[i] != 'a' - 'A') {
+                    isHTTP_ = false;
+                }
+            }
+            if (isHTTP_) {
+                pyobj http_ = pyobj(PyBytes_FromString(e.second.c_str()));
+                PyDict_SetItemString(env.get(), e.first.c_str(), http_.get());
+            }
+        }
+    }
 
     return std::move(env);
 }
