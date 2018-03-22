@@ -74,6 +74,17 @@ static PyTypeObject wsgi_input_type = {
 };
 
 
+static PyObject *start_response(PyObject *args) {
+    Py_UNICODE *status;
+    PyListObject *headers;
+    int ok = PyArg_ParseTuple(args, "uo", &status, &headers);
+    if (!ok) {
+        throw std::runtime_error("start_response expects a status string and a list");
+    }
+    for (PyList_)
+}
+
+
 future<std::unique_ptr<reply>> wsgi_handler::handle(const sstring &path,
                                                     std::unique_ptr<request> req, std::unique_ptr<reply> rep) {
     static sstring content_type("text/plain");
