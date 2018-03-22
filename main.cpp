@@ -22,15 +22,11 @@ int main(int argc, char **argv) {
         auto &&conf = app.configuration();
         ipv4_addr bind_addr(conf["addr"].as<std::string>(), conf["port"].as<uint16_t>());
         server->start().then([server, &conf] {
-            return seastar::make_ready_future<>();
-//            return server->server().invoke_on_others([](http_server &) {
-//                PyEval_InitThreads();
-////                PyEval_ReleaseLock();
-//            });
-        }).then([server, &conf]{
-            return server->set_routes([&conf](seastar::routes &r) {
-
-                auto module = conf["module"].as<std::string>();
+            PyObject *module = PyImport_ImportModule(conf["module"].as<std::string>().c_str());
+            if (!module) {
+                throw std::runtime_error("module not found");
+            }
+            return server->set_routes([&conf, module] (seastar::routes &r) {
                 auto script_path = conf["name"].as<std::string>();
                 auto port_s = std::to_string(conf["port"].as<uint16_t>());
 
@@ -43,10 +39,12 @@ int main(int argc, char **argv) {
                 };
 
                 for (auto op : ops) {
-                    r.add(op, seastar::url(script_path), new wsgi_handler(module, script_path, port_s));
+                    r.add(op, seastar::url(script_path), new wsgi_handler(script_path, port_s, module));
                 }
+            }).then([module] {
+                Py_DecRef(module);
             });
-        }) .then([server, bind_addr] {
+        }).then([server, bind_addr] {
             return server->listen(bind_addr);
         }).then([server] {
             engine().at_exit([server] {
