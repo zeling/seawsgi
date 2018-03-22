@@ -24,7 +24,8 @@ int main(int argc, char **argv) {
         server->start().then([server, &conf] {
             PyObject *module = PyImport_ImportModule(conf["module"].as<std::string>().c_str());
             if (!module) {
-                throw std::runtime_error("module not found");
+                seastar_logger.error("cannot load the module {}", conf["module"].as<std::string>());
+                engine().exit(1);
             }
             return server->set_routes([&conf, module] (seastar::routes &r) {
                 auto script_path = conf["name"].as<std::string>();
@@ -39,7 +40,7 @@ int main(int argc, char **argv) {
                 };
 
                 for (auto op : ops) {
-                    r.add(op, seastar::url(script_path), new wsgi_handler(script_path, port_s, module));
+                    r.add(op, seastar::url(script_path).remainder("path_info"), new wsgi_handler(script_path, port_s, module));
                 }
             }).then([module] {
                 Py_DecRef(module);

@@ -82,6 +82,21 @@ future<std::unique_ptr<reply>> wsgi_handler::handle(const sstring &path,
     rep->set_content_type(content_type);
     rep->write_body(content_type, body);
     auto env = build_environ(req.get());
+
+    seastar_logger.debug("wsgi handling path {}", path);
+
+    pyobj application = pyobj(PyObject_GetAttrString(_module.get(), "application"));
+
+    if (!application.get()) {
+        seastar_logger.error("no application found in module");
+        engine().exit(1);
+    }
+
+    if (!PyCallable_Check(application.get())) {
+        seastar_logger.error("the application of module is not callable");
+        engine().exit(1);
+    }
+
     return make_ready_future<std::unique_ptr<reply>>(std::move(rep));
 }
 
