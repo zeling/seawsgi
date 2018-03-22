@@ -11,7 +11,6 @@ int main(int argc, char **argv) {
     PyEval_InitThreads();
     seastar::app_template app;
     app.add_options()
-            ("help", "how help")
             ("module", bpo::value<std::string>()->default_value("app"), "the module that is intended as the web server")
             ("name", bpo::value<std::string>()->default_value(""), "script name for wsgi applications")
             ("port", bpo::value<uint16_t>()->default_value(8080), "port listening on")
@@ -40,7 +39,7 @@ int main(int argc, char **argv) {
                 };
 
                 for (auto op : ops) {
-                    r.add(op, seastar::url(script_path).remainder("path_info"), new wsgi_handler(script_path, port_s, module));
+                    r.add(op, seastar::url("/" + script_path).remainder("path_info"), new wsgi_handler(script_path, port_s, module));
                 }
             }).then([module] {
                 Py_DecRef(module);

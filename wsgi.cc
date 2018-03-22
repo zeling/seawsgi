@@ -97,6 +97,11 @@ future<std::unique_ptr<reply>> wsgi_handler::handle(const sstring &path,
         engine().exit(1);
     }
 
+    pyobj args = pyobj(PyTuple_New(2));
+    PyTuple_SetItem(args.get(), 0, env.get());
+    PyTuple_SetItem(args.get(), 1, Py_True);
+    PyObject_Call(application.get(), args.get(), NULL);
+
     return make_ready_future<std::unique_ptr<reply>>(std::move(rep));
 }
 
@@ -110,15 +115,15 @@ pyobj wsgi_handler::build_environ(request *req) {
     PyDict_SetItemString(env.get(), "wsgi.multithread", Py_True);
     PyDict_SetItemString(env.get(), "wsgi.multiprocess", Py_False);
     PyDict_SetItemString(env.get(), "wsgi.run_once", Py_False);
-    auto url_schema = pyobj(PyBytes_FromString("http"));
+    auto url_schema = pyobj(PyUnicode_FromString("http"));
     PyDict_SetItemString(env.get(), "wsgi.url_schema", url_schema.get());
     auto input = pyobj(PyObject_New(PyObject, &wsgi_input_type));
     PyDict_SetItemString(env.get(), "wsgi.input", input.get());
 
-    pyobj method = pyobj(PyBytes_FromString(req->_method.c_str()));
+    pyobj method = pyobj(PyUnicode_FromString(req->_method.c_str()));
     PyDict_SetItemString(env.get(), "REQUEST_METHOD", method.get());
 
-    pyobj script_path = pyobj(PyBytes_FromString(_script_name.c_str()));
+    pyobj script_path = pyobj(PyUnicode_FromString(_script_name.c_str()));
     PyDict_SetItemString(env.get(), "SCRIPT_PATH", script_path.get());
 
     auto url = req->_url;
@@ -131,11 +136,11 @@ pyobj wsgi_handler::build_environ(request *req) {
     }
     if (pos != seastar::sstring::npos) {
         url.data()[pos] = '\0';
-        path_info = pyobj(PyBytes_FromString(url.data() + _script_name.size() + 1));
-        query_string = pyobj(PyBytes_FromString(url.data() + pos + 1));
+        path_info = pyobj(PyUnicode_FromString(url.data() + _script_name.size() + 1));
+        query_string = pyobj(PyUnicode_FromString(url.data() + pos + 1));
     } else {
-        path_info = pyobj(PyBytes_FromString(url.data() + _script_name.size() + 1));
-        query_string = pyobj(PyBytes_FromString(""));
+        path_info = pyobj(PyUnicode_FromString(url.data() + _script_name.size() + 1));
+        query_string = pyobj(PyUnicode_FromString(""));
     }
 
     PyDict_SetItemString(env.get(), "PATH_INFO", path_info.get());
@@ -143,23 +148,23 @@ pyobj wsgi_handler::build_environ(request *req) {
 
     auto ctype = req->get_header("Content-Type");
     if (!ctype.empty()) {
-        pyobj content_type = pyobj(PyBytes_FromString(ctype.c_str()));
+        pyobj content_type = pyobj(PyUnicode_FromString(ctype.c_str()));
         PyDict_SetItemString(env.get(), "Content-Type", content_type.get());
     }
 
     auto clength = req->get_header("Content-Length");
     if (!clength.empty()) {
-        pyobj content_length = pyobj(PyBytes_FromString(clength.c_str()));
+        pyobj content_length = pyobj(PyUnicode_FromString(clength.c_str()));
         PyDict_SetItemString(env.get(), "Content-Length", content_length.get());
     }
 
-    pyobj server_name = pyobj(PyBytes_FromString("seawsgi"));
+    pyobj server_name = pyobj(PyUnicode_FromString("seawsgi"));
     PyDict_SetItemString(env.get(), "SERVER_NAME", server_name.get());
 
-    pyobj server_port = pyobj(PyBytes_FromString(_port.c_str()));
+    pyobj server_port = pyobj(PyUnicode_FromString(_port.c_str()));
     PyDict_SetItemString(env.get(), "SERVER_PORT", server_port.get());
 
-    pyobj server_protocol = pyobj(PyBytes_FromString(req->_method.c_str()));
+    pyobj server_protocol = pyobj(PyUnicode_FromString(req->_method.c_str()));
     PyDict_SetItemString(env.get(), "SERVER_PROTOCOL", server_protocol.get());
 
     for (auto &&e : req->_headers) {
@@ -176,7 +181,7 @@ pyobj wsgi_handler::build_environ(request *req) {
                 }
             }
             if (found) {
-                pyobj content_type = pyobj(PyBytes_FromString(e.second.c_str()));
+                pyobj content_type = pyobj(PyUnicode_FromString(e.second.c_str()));
                 PyDict_SetItemString(env.get(), CONTENT_TYPE, content_type.get());
             }
         } else if (field_name.size() == strlen(CONTENT_LENGTH)) {
@@ -188,7 +193,7 @@ pyobj wsgi_handler::build_environ(request *req) {
                 }
             }
             if (found) {
-                pyobj content_length = pyobj(PyBytes_FromString(e.second.c_str()));
+                pyobj content_length = pyobj(PyUnicode_FromString(e.second.c_str()));
                 PyDict_SetItemString(env.get(), CONTENT_LENGTH, content_length.get());
             }
         } else {
@@ -199,7 +204,7 @@ pyobj wsgi_handler::build_environ(request *req) {
                 }
             }
             if (isHTTP_) {
-                pyobj http_ = pyobj(PyBytes_FromString(e.second.c_str()));
+                pyobj http_ = pyobj(PyUnicode_FromString(e.second.c_str()));
                 PyDict_SetItemString(env.get(), e.first.c_str(), http_.get());
             }
         }
