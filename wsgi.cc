@@ -1,5 +1,4 @@
 #include "wsgi.hh"
-#include <iostream>
 
 struct wsgi_input {
     PyObject_HEAD
@@ -73,20 +72,41 @@ static PyTypeObject wsgi_input_type = {
 #endif
 };
 
+struct start_response_self {
+    PyObject_HEAD
+    reply &_reply;
+};
+
 
 static PyObject *start_response(PyObject *self, PyObject *args) {
-    Py_UNICODE *status;
-    PyListObject *headers;
-    int ok = PyArg_ParseTuple(args, "uo", &status, &headers);
+    PyObject *py_status;
+    PyListObject *py_headers;
+    auto *that = static_cast<start_response_self *>(self);
+    int ok = PyArg_ParseTuple(args, "uo", &py_status, &py_headers);
     if (!ok) {
         throw std::runtime_error("start_response expects a status string and a headers list");
     }
+
+    char *status_buf = PyUnicode_AsUTF8(py_status), *p;
+    int code = 0;
+    for (p = status_buf; *p >= '0' && *p <= '9'; p++) {
+        code *= 10;
+        code += *p - '0';
+    }
+
+    if (*p == ' ') p++;
+
+    that->_reply.set_status(static_cast<reply::status_type>(code), sstring(p));
+
+
+
     return nullptr;
-//    for (PyList_)
 }
 
-static PyMethodDef start_response_obj[] = {
-        {"start_response", start_response, METH_VARARGS, ""}
+
+
+static PyMethodDef start_response_method[] = {
+    {"start_response", start_response, METH_VARARGS, ""}
 };
 
 
@@ -116,7 +136,7 @@ future<std::unique_ptr<reply>> wsgi_handler::handle(const sstring &path,
     pyobj args = pyobj(PyTuple_New(2));
     PyTuple_SetItem(args.get(), 0, env.get());
 
-    PyTuple_SetItem(args.get(), 1, PyCFunction_New(start_response_obj, nullptr));
+    PyTuple_SetItem(args.get(), 1, PyCFunction_New(start_response_method, nullptr));
     PyObject_CallObject(application.get(), args.get());
     return make_ready_future<std::unique_ptr<reply>>(std::move(rep));
 }
